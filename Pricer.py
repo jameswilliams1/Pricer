@@ -127,13 +127,16 @@ def parse_order(order):
 
 
 orders = OrderBook()
-target_size = 200
+target_size = 10000
 
-with file('pricer.in') as f:
+with file('pricer.in') as f, file('output10000.txt', 'w') as g:
     last_buy = 'NA'
     last_sell = 'NA'
-    for i in range(10):
-        order_details = parse_order(f.readline())
+    for line in f:
+        #line = f.readline()
+        order_details = parse_order(line)
+        if not line:
+            break
         orders.new_order(order_details)
         this_buy = orders.lowest_buy(target_size)
         this_sell = orders.highest_sell(target_size)
@@ -141,17 +144,12 @@ with file('pricer.in') as f:
         if this_buy == last_buy:
             pass
         else:
-            print timestamp + ' B ' + this_buy
+            #print timestamp + ' B ' + this_buy
+            g.write(timestamp + ' B ' + this_buy + '\n')
             last_buy = this_buy
         if this_sell == last_sell:
             pass
         else:
-            print timestamp + ' S ' + this_sell
+            #print timestamp + ' S ' + this_sell
+            g.write(timestamp + ' S ' + this_sell+ '\n')
             last_sell = this_sell
-print ''
-with file('pricer.out.200') as f:
-    for i in range(10):
-        print f.readline()
-
-
-
