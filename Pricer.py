@@ -1,132 +1,83 @@
+"""This module uses a live market orders feed and/or stored log file for a particular stock to output changes in the
+best buy and sell price for a user defined amount of shares.
+"""
 import numpy as np
 import pandas as pd
 import timeit
 
 
-class OrderFormatError(Exception):
-    pass
+class Error(Exception):
+    """Base class for exceptions in this module."""
+    def __call__(self, *args):
+        return self.__class__(*(self.args + args))
+    """Return arguments in a readable format"""
+    def __str__(self):
+        return ': '.join(self.args)
 
 
-def process_order_simple(line, book, counter_variable):
-
-    try:
-        this_order = line.split()
-        if this_order[1] == 'R':  # Check for REDUCE orders
-            for order in book:  # Iterate existing order book
-                if order[2] == this_order[2]: # Find ID match
-                    previous_size = int(order[5])
-                    reduction = int(this_order[3])
-                    new_size = previous_size - reduction
-                    if new_size == 0:
-                        book.remove(order)
-                    order[5] = str(new_size)
-                    return this_order[0]
-
-        elif this_order[1] == 'A':  # Check for ADD orders
-            book.append(this_order)
-            return this_order[0]
-    except OrderFormatError():
-        'Order not formatted correctly'
+class OrderNotFoundError(Error):
+    """Exception raised for errors in reduce orders."""
 
 
-def add_to_book_simple(log_file, order_book,counter_variable, output_log):
-    i=0
-    with open(log_file) as past_orders, open(output_log, 'w') as output:
+class OrderBook:
+    def __init__(self):
+        """Create a blank dictionary for each side (bid/ask), format: price:total and one for order ids,
+        format: id:(price, side)."""
+        self.bids = {}
+        self.asks = {}
+        self.ids = {}
 
-        current_buy = 0.0
-        current_sell = 0.0
-        past_buy = 'NA'
-        past_sell = 'NA'
-        for j in past_orders:
-            timestamp = process_order_simple(j, order_book, counter_variable)
-            current_buy = total_buy_price(order_book, 200)
-            current_sell = total_sell_price(order_book, 200)
-            #print j
-            if current_buy != past_buy:
-                #print j
-                #print timestamp, 'B ', current_buy
-                past_buy = current_buy
-                outputtext = str(timestamp) + ' B ' + str(current_buy) + '\n'
-                output.write(outputtext)
-            if current_sell != past_sell:
-                #print j
-                #print timestamp , 'S', current_sell
-                past_sell = current_sell
-                outputtext = str(timestamp) + ' S ' + str(current_sell) + '\n'
-                output.write(outputtext)
+    def update_total(self, side, price, size):
+        """Add (/subtract if negative) size to total if price already exists, else create new price total."""
+        if side == 'B':
+            if price in self.bids:
+                self.bids[price] += size
+            else:
+                self.bids[price] = size
+        if side == 'S':
+            if price in self.asks:
+                self.asks[price] += size
+            else:
+                self.asks[price] = size
 
-            i += 1
-            if i>999999999999:
-                break
+    def add_order(self, timestamp, order_id, side, price, size):
+        """Add a new order to the ids dictionary so it can later be removed and update total, id must be unique."""
+        self.ids[order_id] = (timestamp, side, price)
+        self.update_total(side, price, size)
 
-
-def total_buy_price(order_book, target_size):
-    #  Cost to buy target_size shares
-    total_cost = 0.0
-    shares_needed = target_size
-    available_shares = 0
-    used_orders = []
-    while len(order_book) > len(used_orders):
-        current_id = ''
-        lowest_price = float('inf')
-        for order in order_book:
-            current_id = order[2]
-            current_price = float(order[4])
-            order_type = order[3]
-            if current_price < lowest_price and current_id not in used_orders:
-                if order_type == 'B':
-                    used_orders.append(current_id)
-                    continue
-                lowest_price = current_price
-                available_shares = int(order[5])
-        if available_shares >= shares_needed:
-            total_cost += shares_needed * lowest_price
-            return "{:.2f}".format(total_cost)
+    def reduce_order(self, order_id, size):
+        """Find order_id and side in ids then remove size shares from total in bids/asks."""
+        if order_id in self.ids:
+            price, side = self.ids.get(order_id)
+            self.update_total(side, price, size)
         else:
-            shares_needed -= available_shares
-            total_cost += (available_shares * lowest_price)
-            used_orders.append(current_id)
+            raise OrderNotFoundError('Order does not exist', order_id)
 
-    return 'NA'
-
-
-def total_sell_price(order_book, target_size):
-    #  Cost to sell target_size shares
-    total_sell = 0.0
-    shares_needed = target_size
-    available_shares = 0
-    used_orders = []
-    while len(order_book) > len(used_orders):
-        current_id = ''
-        highest_price = 0.0
-        for order in order_book:
-            current_id = order[2]
-            current_price = float(order[4])
-            order_type = order[3]
-            if current_price > highest_price and current_id not in used_orders:
-                if order_type == 'S':
-                    used_orders.append(current_id)
-                    continue
-                highest_price = current_price
-                available_shares = int(order[5])
-        if available_shares >= shares_needed:
-            total_sell += shares_needed * highest_price
-            return "{:.2f}".format(total_sell)
-        else:
-            shares_needed -= available_shares
-            total_sell += (available_shares * highest_price)
-            used_orders.append(current_id)
-
-    return 'NA'
+    def new_order(self, *args):
+        """Determine an order type and call the correct method"""
+        timestamp = args[0]
+        order_id = args[1]
+        if len(args) == 5:  # Add order
+            side = args[2]
+            price = args[3]
+            size = args[4]
+            self.add_order(timestamp, order_id, side, price, size)
+        elif len(args) == 3:  # Reduce order
+            size = args[2]
+            self.reduce_order(order_id, size)
 
 
+def parse_order(order):
+    """Parse order message into input for OrderBook methods"""
+    parsed_order = order.split()
+    timestamp = parsed_order[0]
+    order_id = parsed_order[2]
+    if parsed_order[1] == 'A':
+        side = parsed_order[3]
+        price = parsed_order[4]
+        size = parsed_order[5]
+        return timestamp, order_id, side, price, size
+    elif parsed_order[1] == 'R':
+        size = parsed_order[3]
+        return timestamp, order_id, size
 
-
-
-
-
-
-
-order_book = []
-counter = 0
-add_to_book_simple('pricer.in', order_book, counter, "output200.txt")
