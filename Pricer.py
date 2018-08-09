@@ -87,13 +87,28 @@ class OrderBook:
             available_shares = self.asks[price]
             if available_shares >= shares_needed:
                 total_cost += shares_needed * price
-                return total_cost
+                return "{:.2f}".format(total_cost)
             else:
                 total_cost += available_shares * price
                 shares_needed -= available_shares
         if shares_needed > 0:
             return 'NA'
 
+    def highest_sell(self, target_size):
+        """Find highest price for selling target_size shares"""
+        shares_needed = target_size
+        total_income = 0.0
+        prices = sorted(self.bids.keys(), reverse=True)
+        for price in prices:
+            available_shares = self.bids[price]
+            if available_shares >= shares_needed:
+                total_income += shares_needed * price
+                return "{:.2f}".format(total_income)
+            else:
+                total_income += available_shares * price
+                shares_needed -= available_shares
+        if shares_needed > 0:
+            return 'NA'
 
 
 def parse_order(order):
@@ -110,13 +125,33 @@ def parse_order(order):
         size = -int(parsed_order[3])
         return timestamp, order_id, size
 
+
 orders = OrderBook()
+target_size = 200
+
 with file('pricer.in') as f:
+    last_buy = 'NA'
+    last_sell = 'NA'
     for i in range(10):
-        line = parse_order(f.readline())
-        print line
-        orders.new_order(line)
-        print orders.lowest_buy(101)
+        order_details = parse_order(f.readline())
+        orders.new_order(order_details)
+        this_buy = orders.lowest_buy(target_size)
+        this_sell = orders.highest_sell(target_size)
+        timestamp = order_details[0]
+        if this_buy == last_buy:
+            pass
+        else:
+            print timestamp + ' B ' + this_buy
+            last_buy = this_buy
+        if this_sell == last_sell:
+            pass
+        else:
+            print timestamp + ' S ' + this_sell
+            last_sell = this_sell
+print ''
+with file('pricer.out.200') as f:
+    for i in range(10):
+        print f.readline()
 
 
 
