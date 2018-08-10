@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """This module uses a live market orders feed and/or stored log file for a particular stock to output changes in the
 best buy and sell price for a user defined amount of shares.
 """
@@ -29,7 +30,7 @@ class OrderBook:
         self.ids = {}
 
     def __str__(self):
-        """Display stored order as timestamp, order_id, side, price."""
+        """Display stored orders as timestamp, order_id, side, price."""
         return_list = []
         for order_id in self.ids.keys():
             order = self.ids[order_id]
@@ -38,7 +39,6 @@ class OrderBook:
             elif order[1] == 'S':
                 return_list.append(str(order[0] + ' ' + order_id + ' S ' + order[2]))
         return '\n'.join(return_list)
-
 
     def update_total(self, side, price, size):
         """Add (/subtract if negative) size to total if price already exists, else create new price total."""
@@ -127,43 +127,54 @@ def parse_order(order):
         return timestamp, order_id, size
 
 
-def find_prices(order_book, input_data, target_size):
+def find_prices(order_book, input_line, target_size):
     """Print the best buy and sell prices for target_size shares with each order if prices change."""
-    last_buy = 'NA'
-    last_sell = 'NA'
-    for line in input_data:
-        order_details = parse_order(line)
-        order_book.new_order(order_details)
-        timestamp = order_details[0]
-        if order_details[2] == 'S':  # Ask order
-            this_buy = order_book.lowest_buy(target_size)
-            if this_buy == last_buy:
-                pass
-            else:
-                print timestamp, 'B', this_buy
-                last_buy = this_buy
-        elif order_details[2] == 'B':  # Bid order
-            this_sell = order_book.highest_sell(target_size)
-            if this_sell == last_sell:
-                pass
-            else:
-                print timestamp, 'S', this_sell
-                last_sell = this_sell
-        elif len(order_details) == 3:  # Reduce order (cannot determine B/S without checking order_book)
-            this_buy = order_book.lowest_buy(target_size)
-            if this_buy == last_buy:
-                pass
-            else:
-                print timestamp, 'B', this_buy
-                last_buy = this_buy
-            this_sell = order_book.highest_sell(target_size)
-            if this_sell == last_sell:
-                pass
-            else:
-                print timestamp, 'S', this_sell
-                last_sell = this_sell
+    global last_sell
+    global last_buy
+    order_details = parse_order(input_line)
+    order_book.new_order(order_details)
+    timestamp = order_details[0]
+    if order_details[2] == 'S':  # Ask order
+        this_buy = order_book.lowest_buy(target_size)
+        if this_buy == last_buy:
+            pass
+        else:
+            print timestamp, 'B', this_buy
+            last_buy = this_buy
+    elif order_details[2] == 'B':  # Bid order
+        this_sell = order_book.highest_sell(target_size)
+        if this_sell == last_sell:
+            pass
+        else:
+            print timestamp, 'S', this_sell
+            last_sell = this_sell
+    elif len(order_details) == 3:  # Reduce order (cannot determine side without checking order_book)
+        this_buy = order_book.lowest_buy(target_size)
+        if this_buy == last_buy:
+            pass
+        else:
+            print timestamp, 'B', this_buy
+            last_buy = this_buy
+        this_sell = order_book.highest_sell(target_size)
+        if this_sell == last_sell:
+            pass
+        else:
+            print timestamp, 'S', this_sell
+            last_sell = this_sell
 
 
+def run_pricer(order_book):
+    """Input target_size and continuous market data, run find_prices and output results"""
+    target_size = input()
+    while True:
+        try:
+            input_line = raw_input()
+            find_prices(order_book, input_line, target_size)
+        except:
+            pass
+
+
+last_buy = 'NA'
+last_sell = 'NA'
 order_book = OrderBook()
-with open('pricer.in') as f:
-    find_prices(order_book, f, 1)
+run_pricer(order_book)
