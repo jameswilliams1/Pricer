@@ -22,6 +22,9 @@ class OrderFormatError(Error):
     """Exception raised for input orders with an incorrect format."""
 
 
+class DuplicateOrderError(Error):
+    """Exception raised for input orders that match the order_id of existing orders"""
+
 class OrderBook:
     def __init__(self):
         """Create a blank dictionary for each side (bid/ask), format: price:total and one for order ids,
@@ -55,9 +58,12 @@ class OrderBook:
                 self.asks[price] = size
 
     def add_order(self, timestamp, order_id, side, price, size):
-        """Add a new order to the ids dictionary so it can later be removed and update total, id must be unique."""
-        self.ids[order_id] = (timestamp, side, price)
-        self.update_total(side, price, size)
+        """Add a new order to the ids dictionary so it can later be removed and update total."""
+        if order_id not in self.ids:
+            self.ids[order_id] = (timestamp, side, price)
+            self.update_total(side, price, size)
+        else:
+            raise DuplicateOrderError('Order ID is already present', order_id)
 
     def reduce_order(self, order_id, size):
         """Find order_id and side in ids then remove size shares from total in bids/asks."""
@@ -75,10 +81,16 @@ class OrderBook:
             side = details[2]
             price = details[3]
             size = details[4]
-            self.add_order(timestamp, order_id, side, price, size)
+            try:
+                self.add_order(timestamp, order_id, side, price, size)
+            except DuplicateOrderError as e:
+                print >> sys.stderr, type(e).__name__ + ':', e
         elif len(details) == 3:  # Reduce order
             size = details[2]
-            self.reduce_order(order_id, size)
+            try:
+                self.reduce_order(order_id, size)
+            except OrderNotFoundError as e:
+                print >> sys.stderr, type(e).__name__ + ':', e
 
     def lowest_buy(self, target_size):
         """Find lowest cost of buying target_size shares."""
