@@ -2,6 +2,7 @@
 """This module uses a live market orders feed and/or stored log file for a particular stock to output changes in the
 best buy and sell price for a user defined amount of shares.
 """
+import sys
 
 
 class Error(Exception):
@@ -131,7 +132,11 @@ def find_prices(order_book, input_line, target_size):
     """Print the best buy and sell prices for target_size shares with each order if prices change."""
     global last_sell
     global last_buy
-    order_details = parse_order(input_line)
+    try:
+        order_details = parse_order(input_line)
+    except IndexError:
+        raise OrderFormatError('Order could not be parsed')
+
     order_book.new_order(order_details)
     timestamp = order_details[0]
     if order_details[2] == 'S':  # Ask order
@@ -163,15 +168,29 @@ def find_prices(order_book, input_line, target_size):
             last_sell = this_sell
 
 
+def set_target_size():
+    """Get target_size value from user and check for errors"""
+    target_size = int(raw_input())
+    if target_size <= 0:
+        raise ValueError('Target size must be an integer greater than 0')
+    return target_size
+
+
 def run_pricer(order_book):
     """Input target_size and continuous market data, run find_prices and output results"""
-    target_size = input()
+    target_size = 0
+    while True:
+        try:
+            target_size = set_target_size()
+            break
+        except ValueError as e:
+            print >> sys.stderr, type(e).__name__ + ':', e
     while True:
         try:
             input_line = raw_input()
             find_prices(order_book, input_line, target_size)
-        except:
-            pass
+        except OrderFormatError as e:
+            print >> sys.stderr, type(e).__name__ + ':', e
 
 
 last_buy = 'NA'
