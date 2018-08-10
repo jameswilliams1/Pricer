@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-"""This module uses a live market orders feed and/or stored log file for a particular stock to output changes in the
-best buy and sell price for a user defined amount of shares.
+"""This module uses a live market orders feed file for a particular stock to output changes in the best buy and sell
+price for a user defined amount of shares.
 """
 import sys
 
@@ -24,6 +24,7 @@ class OrderFormatError(Error):
 
 class DuplicateOrderError(Error):
     """Exception raised for input orders that match the order_id of existing orders"""
+
 
 class OrderBook:
     def __init__(self):
@@ -147,10 +148,12 @@ def find_prices(order_book, input_line, target_size):
     try:
         order_details = parse_order(input_line)
     except IndexError:
-        raise OrderFormatError('Order could not be parsed')
-
-    order_book.new_order(order_details)
-    timestamp = order_details[0]
+        raise OrderFormatError('Order could not be parsed', input_line)
+    try:
+        order_book.new_order(order_details)
+        timestamp = order_details[0]
+    except TypeError:
+        raise OrderFormatError('Order could not be parsed', input_line)
     if order_details[2] == 'S':  # Ask order
         this_buy = order_book.lowest_buy(target_size)
         if this_buy == last_buy:
