@@ -1,9 +1,6 @@
 """This module uses a live market orders feed and/or stored log file for a particular stock to output changes in the
 best buy and sell price for a user defined amount of shares.
 """
-import numpy as np
-import pandas as pd
-import timeit
 
 
 class Error(Exception):
@@ -16,7 +13,11 @@ class Error(Exception):
 
 
 class OrderNotFoundError(Error):
-    """Exception raised for errors in reduce orders."""
+    """Exception raised for reduce orders containing a new order_id."""
+
+
+class OrderFormatError(Error):
+    """Exception raised for input orders with an incorrect format."""
 
 
 class OrderBook:
@@ -28,7 +29,7 @@ class OrderBook:
         self.ids = {}
 
     def __str__(self):
-        """Display stored order as timestamp, order_id, side, price"""
+        """Display stored order as timestamp, order_id, side, price."""
         return_list = []
         for order_id in self.ids.keys():
             order = self.ids[order_id]
@@ -66,7 +67,7 @@ class OrderBook:
             raise OrderNotFoundError('Order does not exist', order_id)
 
     def new_order(self, details):
-        """Determine an order type from tuple details and call the correct method"""
+        """Determine an order type from tuple details and call the correct method."""
         timestamp = details[0]
         order_id = details[1]
         if len(details) == 5:  # Add order
@@ -79,7 +80,7 @@ class OrderBook:
             self.reduce_order(order_id, size)
 
     def lowest_buy(self, target_size):
-        """Find lowest cost of buying target_size shares"""
+        """Find lowest cost of buying target_size shares."""
         shares_needed = target_size
         total_cost = 0.0
         prices = sorted(self.asks.keys())
@@ -95,7 +96,7 @@ class OrderBook:
             return 'NA'
 
     def highest_sell(self, target_size):
-        """Find highest price for selling target_size shares"""
+        """Find highest price for selling target_size shares."""
         shares_needed = target_size
         total_income = 0.0
         prices = sorted(self.bids.keys(), reverse=True)
@@ -112,44 +113,57 @@ class OrderBook:
 
 
 def parse_order(order):
-    """Parse order message into input for OrderBook methods"""
+    """Parse order message into input for OrderBook methods."""
     parsed_order = order.split()
     timestamp = parsed_order[0]
     order_id = parsed_order[2]
-    if parsed_order[1] == 'A':
+    if parsed_order[1] == 'A':  # Add order
         side = parsed_order[3]
         price = float(parsed_order[4])
         size = int(parsed_order[5])
         return timestamp, order_id, side, price, size
-    elif parsed_order[1] == 'R':
+    elif parsed_order[1] == 'R':  # Reduce order
         size = -int(parsed_order[3])
         return timestamp, order_id, size
 
 
-orders = OrderBook()
-target_size = 10000
-
-with file('pricer.in') as f, file('output10000.txt', 'w') as g:
+def find_prices(order_book, input_data, target_size):
+    """Print the best buy and sell prices for target_size shares with each order if prices change."""
     last_buy = 'NA'
     last_sell = 'NA'
-    for line in f:
-        #line = f.readline()
+    for line in input_data:
         order_details = parse_order(line)
-        if not line:
-            break
-        orders.new_order(order_details)
-        this_buy = orders.lowest_buy(target_size)
-        this_sell = orders.highest_sell(target_size)
+        order_book.new_order(order_details)
         timestamp = order_details[0]
-        if this_buy == last_buy:
-            pass
-        else:
-            #print timestamp + ' B ' + this_buy
-            g.write(timestamp + ' B ' + this_buy + '\n')
-            last_buy = this_buy
-        if this_sell == last_sell:
-            pass
-        else:
-            #print timestamp + ' S ' + this_sell
-            g.write(timestamp + ' S ' + this_sell+ '\n')
-            last_sell = this_sell
+        if order_details[2] == 'S':  # Ask order
+            this_buy = order_book.lowest_buy(target_size)
+            if this_buy == last_buy:
+                pass
+            else:
+                print timestamp, 'B', this_buy
+                last_buy = this_buy
+        elif order_details[2] == 'B':  # Bid order
+            this_sell = order_book.highest_sell(target_size)
+            if this_sell == last_sell:
+                pass
+            else:
+                print timestamp, 'S', this_sell
+                last_sell = this_sell
+        elif len(order_details) == 3:  # Reduce order (cannot determine B/S without checking order_book)
+            this_buy = order_book.lowest_buy(target_size)
+            if this_buy == last_buy:
+                pass
+            else:
+                print timestamp, 'B', this_buy
+                last_buy = this_buy
+            this_sell = order_book.highest_sell(target_size)
+            if this_sell == last_sell:
+                pass
+            else:
+                print timestamp, 'S', this_sell
+                last_sell = this_sell
+
+
+order_book = OrderBook()
+with open('pricer.in') as f:
+    find_prices(order_book, f, 1)
