@@ -183,9 +183,9 @@ def find_prices(order_book, input_line, target_size):
             last_sell = this_sell
 
 
-def set_target_size():
+def set_target_size(arg2):
     """Get target_size value from user and check for errors"""
-    target_size = int(raw_input())
+    target_size = int(arg2)
     if target_size <= 0:
         raise ValueError('Target size must be an integer greater than 0')
     return target_size
@@ -196,7 +196,7 @@ def run_pricer(order_book):
     target_size = 0
     while True:
         try:
-            target_size = set_target_size()
+            target_size = set_target_size(sys.argv[1])
             break
         except ValueError as e:
             print >> sys.stderr, type(e).__name__ + ':', e
